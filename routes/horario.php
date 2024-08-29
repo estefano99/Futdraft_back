@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\HorarioController;
 
-Route::prefix('admin')->group(function () {
+Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::prefix('horarios')->group(function () {
         Route::get('/', [HorarioController::class, 'listadoHorarios']);
         Route::post('/', [HorarioController::class, 'crearHorario']);

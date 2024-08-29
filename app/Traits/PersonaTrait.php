@@ -4,6 +4,6 @@ namespace App\Traits;
 
 trait PersonaTrait
 {
-    public $email;
-    public $contrasenia;
+    // public $email;
+    // public $password;
 }

@@ -8,10 +8,11 @@ use App\Traits\PersonaTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, PersonaTrait;
+    use HasFactory, Notifiable, PersonaTrait, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
@@ -21,7 +22,7 @@ class User extends Authenticatable
     protected $fillable = [
         'nombre',
         'apellido',
-        'contrasenia',
+        'password',
         'email',
         'nro_celular',
         'dni',
@@ -34,7 +35,7 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $hidden = [
-        'contrasenia',
+        'password',
         'remember_token',
     ];
 
