@@ -1,5 +1,4 @@
 <?php
-
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -15,6 +14,8 @@ return new class extends Migration
             $table->id();
             $table->decimal('precio', 8, 2);
             $table->timestamp('fecha');
+            $table->unsignedBigInteger('cancha_id'); // Agregar la columna cancha_id
+            $table->unsignedBigInteger('usuario_id'); // Agregar la columna usuario_id
             $table->timestamps();
 
             // Definir la clave foránea
@@ -31,3 +32,4 @@ return new class extends Migration
         Schema::dropIfExists('reservas');
     }
 };
+

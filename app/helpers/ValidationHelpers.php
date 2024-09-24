@@ -31,4 +31,28 @@ class ValidationHelpers
             'duracion_turno.date_format' => 'La duración del turno debe estar en el formato HH:MM:SS.',
         ];
     }
+
+    public static function reservaRules() {
+        return [
+            'precio' => 'required|numeric|min:0',
+            'fecha' => 'required|date_format:Y-m-d H:i:s',
+            'cancha_id' => 'required|exists:cancha,id',
+            'usuario_id' => 'required|exists:users,id',
+        ];
+    }
+
+    public static function reservaMessages() {
+        return
+            [
+                'precio.required' => 'El campo precio es obligatorio.',
+                'precio.numeric' => 'El campo precio debe ser un número.',
+                'precio.min' => 'El precio debe ser mayor o igual a 0.',
+                'fecha.required' => 'El campo fecha es obligatorio.',
+                'fecha.date_format' => 'El campo fecha debe estar en el formato Y-m-d H:i:s.',
+                'cancha_id.required' => 'El campo cancha_id es obligatorio.',
+                'cancha_id.exists' => 'El campo cancha_id debe ser un ID válido de una cancha existente.',
+                'usuario_id.required' => 'El campo usuario_id es obligatorio.',
+                'usuario_id.exists' => 'El campo usuario_id debe ser un ID válido de un usuario existente.',
+            ];
+    }
 }
