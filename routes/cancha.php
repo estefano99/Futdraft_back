@@ -9,6 +9,6 @@ Route::prefix('admin')->group(function () {
         Route::post('/', [CanchaController::class, 'crearCancha']);
         Route::get('/{id}', [CanchaController::class, 'show']);
         Route::put('/{id}', [CanchaController::class, 'editarCancha']);
-        Route::delete('/{id}', [CanchaController::class, 'destroy']);
+        Route::delete('/{id}', [CanchaController::class, 'eliminarCancha']);
     });
 });

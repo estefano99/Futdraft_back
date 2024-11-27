@@ -9,6 +9,6 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
         Route::post('/', [HorarioController::class, 'crearHorario']);
         Route::get('{id}/{fecha}', [HorarioController::class, 'listadoHorario']);
         Route::put('{id}', [HorarioController::class, 'editarHorario']);
-        Route::delete('{id}', [HorarioController::class, 'destroy']);
+        Route::delete('{id}', [HorarioController::class, 'eliminarHorario']);
     });
 });

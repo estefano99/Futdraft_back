@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cancha;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class canchaController extends Controller
@@ -101,4 +102,39 @@ class canchaController extends Controller
         ];
         return response()->json($data, 200);
     }
+
+    public function eliminarCancha($id)
+{
+    $cancha = Cancha::find($id);
+
+    if (!$cancha) {
+        return response()->json(["message" => "Cancha no encontrada"], 404);
+    }
+
+    // Verificar si hay horarios o reservas asociadas a esta cancha
+    $asociaciones = DB::table('cancha')
+        ->leftJoin('horario', 'cancha.id', '=', 'horario.cancha_id')
+        ->leftJoin('reservas', 'cancha.id', '=', 'reservas.cancha_id')
+        ->where('cancha.id', $id)
+        ->where(function ($query) {
+            $query->whereNotNull('horario.id') // Si hay horarios asociados
+                  ->orWhereNotNull('reservas.id'); // Si hay reservas asociadas
+        })
+        ->exists();
+
+    // Depuración
+    Log::info($asociaciones);
+
+    if ($asociaciones) {
+        return response()->json([
+            "message" => "No se puede eliminar esta cancha porque tiene horarios o reservas asociadas."
+        ], 400);
+    }
+
+    // Eliminar la cancha si no tiene horarios ni reservas asociadas
+    $cancha->delete();
+
+    return response()->json(["message" => "Cancha eliminada exitosamente."], 200);
+}
+
 }

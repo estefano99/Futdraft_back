@@ -7,7 +7,7 @@ Route::prefix('cliente')->group(function () {
     Route::prefix('reservas')->group(function () {
         Route::get('/', [reservaController::class, 'listadoReservas']);
         Route::post('/', [reservaController::class, 'crearReserva']);
-        Route::get('/{id}', [reservaController::class, 'obtenerReservas']);
+        Route::get('/{id}', [reservaController::class, 'obtenerReservasByIdUsuario']);
         Route::put('/{id}', [reservaController::class, 'editarReserva']);
         Route::delete('/{id}', [reservaController::class, 'eliminarReserva']);
     });

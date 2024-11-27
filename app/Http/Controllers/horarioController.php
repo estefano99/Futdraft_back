@@ -7,16 +7,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Helpers\ValidationHelpers;
+use App\Models\Reserva;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class horarioController extends Controller
 {
 
-    public function listadoHorarios()
+    public function listadoHorarios(Request $request)
     {
+        $nroCancha = $request->input("filtrarNroCancha");
+        $fecha = $request->input("filtrarFecha");
+        $HoraApertura = $request->input("filtrarHoraApertura");
+        $isFinalizados = filter_var($request->input('isFinalizados'), FILTER_VALIDATE_BOOLEAN);
+        Log::info($request);
+
         $currentDate = Carbon::now()->toDateString();
 
-        $horarios = Horario::join('cancha', 'horario.cancha_id', '=', 'cancha.id')
+        $query = Horario::join('cancha', 'horario.cancha_id', '=', 'cancha.id')
             ->select(
                 'horario.id as id',
                 'horario.cancha_id',
@@ -27,11 +35,28 @@ class horarioController extends Controller
                 'cancha.nro_cancha',
                 'cancha.precio'
             )
-            ->where('horario.fecha', '>=', $currentDate)
-            ->orderBy('horario.fecha', 'asc')
-            ->paginate(5);
+            ->where('horario.fecha', $isFinalizados ? "<" : ">=", $currentDate)
+            ->orderBy('horario.fecha', 'asc');
 
-        // Log::info($horarios);
+        // Filtrar por número de cancha
+        if (!empty($nroCancha)) {
+            $query->where('cancha.nro_cancha', 'LIKE', "%{$nroCancha}%");
+        }
+
+        if (!empty($fecha)) {
+            $query->where('horario.fecha', 'LIKE', "%{$fecha}%");
+        }
+
+        if (!empty($HoraApertura)) {
+            $query->where('horario.horario_apertura', 'LIKE', "%{$HoraApertura}%");
+        }
+
+        $horarios = $query->paginate(5);
+
+        if ($horarios->isEmpty()) {
+            return response()->json(["message" => "No se encontraron horarios"], 404);
+        }
+
         $data = [
             'horarios' => $horarios->items(),
             'meta' => [
@@ -65,8 +90,8 @@ class horarioController extends Controller
         }
 
         $horario = Horario::where('cancha_id', $cancha_id)
-        ->whereDate('fecha', $fecha)
-        ->first();
+            ->whereDate('fecha', $fecha)
+            ->first();
 
         // Log::info($horario);
 
@@ -121,8 +146,9 @@ class horarioController extends Controller
 
     public function editarHorario(Request $request, $id)
     {
+        Log::info($request);
+        Log::info($id);
         $horario = Horario::find($id);
-        Log::info($horario);
 
         if (!$horario) {
             $data = [
@@ -174,5 +200,37 @@ class horarioController extends Controller
         } catch (\Exception $e) {
             return response()->json(['errors' => 'Ocurrió un error al actualizar el horario: ' . $e->getMessage()], 500);
         }
+    }
+
+    public function eliminarHorario($id)
+    {
+        $horario = Horario::find($id);
+
+        if (!$horario) {
+            return response()->json(["message" => "Horario no encontrado"], 404);
+        }
+
+        // Verificar si hay reservas asociadas a este horario
+        $reservasAsociadas = DB::table('horario')
+            ->join('cancha', 'horario.cancha_id', '=', 'cancha.id')
+            ->join('reservas', 'cancha.id', '=', 'reservas.cancha_id')
+            ->where('horario.id', $id)
+            ->whereDate('reservas.fecha', '=', DB::raw('horario.fecha')) // Coincidencia exacta de la fecha
+            ->select('reservas.id as reserva_id', 'horario.id as horario_id', 'cancha.id as cancha_id')
+            ->exists();
+
+        // Depuración
+        Log::info($reservasAsociadas);
+
+        if ($reservasAsociadas) {
+            return response()->json([
+                "message" => "No se puede eliminar este horario porque tiene reservas asociadas."
+            ], 400);
+        }
+
+        // Eliminar el horario si no tiene reservas
+        $horario->delete();
+
+        return response()->json(["message" => "Horario eliminado exitosamente."], 200);
     }
 }

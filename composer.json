@@ -25,7 +25,8 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helpers/ValidationHelpers.php"
+            "app/Helpers/ValidationHelpers.php",
+            "app/Helpers/HorarioReservaHelper.php"
         ]
     },
     "autoload-dev": {
