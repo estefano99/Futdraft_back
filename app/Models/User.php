@@ -26,8 +26,12 @@ class User extends Authenticatable
         'email',
         'nro_celular',
         'dni',
+        'estado',
         'tipo_usuario'
     ];
+
+    //Atributo temporal para el password usarlo en el observer
+    public $temporalPassword;
 
     /**
      * The attributes that should be hidden for serialization.
@@ -50,5 +54,22 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function grupos()
+    {
+        return $this->belongsToMany(Grupo::class, 'grupo_usuario', 'user_id', 'grupo_id');
+    }
+
+    public function acciones()
+    {
+        return $this->belongsToMany(Accion::class, 'usuario_accion', 'usu_id', 'acc_id');
+    }
+
+    public function scopeActivos($query) {
+        return $query->where('estado', 1);
+    }
+    public function scopeInactivos($query) {
+        return $query->where('estado', 0);
     }
 }

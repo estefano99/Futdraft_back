@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Helpers\ValidationHelpers;
 use App\Models\Reserva;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Facades\DB;
 
 class horarioController extends Controller
@@ -109,6 +110,21 @@ class horarioController extends Controller
             'status' => 200
         ];
         return response()->json($data, 200);
+    }
+
+    public function listadoFechasConHorarios($cancha_id)
+    {
+        try {
+            // Obtener fechas únicas con horarios configurados
+            $fechasConHorarios = Horario::where('cancha_id', $cancha_id)
+                ->select('fecha')
+                ->distinct()
+                ->pluck('fecha');
+
+            return response()->json(["fechas" => $fechasConHorarios], 200);
+        } catch (Exception $e) {
+            return response()->json(['errors' => 'Ocurrió un error al actualizar el horario: ' . $e->getMessage()], 500);
+        }
     }
 
     public function crearHorario(Request $request)

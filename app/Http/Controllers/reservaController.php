@@ -7,6 +7,7 @@ use App\Models\Horario;
 use App\Models\Reserva;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
@@ -104,6 +105,48 @@ class reservaController extends Controller
     }
 
 
+    //Se usa para administrar reservas.
+    public function listadoReservasConUsuarios(Request $request)
+    {
+        Log::info($request);
+
+        $start = $request->query('start');
+        $end = $request->query('end');
+        $cancha_id = $request->query('cancha_id');
+
+        if (!$start || !$end || !$cancha_id) {
+            return response()->json(["message" => "Parámetros de fecha o cancha_id faltantes"], 400);
+        }
+
+        try {
+            $reservas = Reserva::join('cancha', 'reservas.cancha_id', '=', 'cancha.id')
+                ->join('users', 'reservas.usuario_id', '=', 'users.id')
+                ->where('reservas.cancha_id', $cancha_id)
+                ->whereBetween('reservas.fecha', [$start, $end])
+                ->select(
+                    'reservas.*',
+                    'cancha.nro_cancha',
+                    'users.id as usuario_id',
+                    'users.nombre as usuario_nombre',
+                    'users.apellido as usuario_apellido',
+                    'users.email as usuario_email'
+                )
+                ->get();
+
+            $reservasConDuracion = $reservas->map(function ($reserva) {
+                return calcularHorarioReserva($reserva);
+            });
+
+            return response()->json(["reservas" => $reservasConDuracion], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                "message" => "Error al obtener las reservas",
+                "error" => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     public function crearReserva(Request $request)
     {
         Log::info($request);
@@ -130,11 +173,20 @@ class reservaController extends Controller
 
         $reserva->save();
 
+        // Realiza el join con la tabla 'users' para incluir los datos del usuario
         $reserva = Reserva::join('cancha', 'reservas.cancha_id', '=', 'cancha.id')
+            ->join('users', 'reservas.usuario_id', '=', 'users.id')
             ->where('reservas.id', $reserva->id)
-            ->select('reservas.*', 'cancha.nro_cancha')
+            ->select(
+                'reservas.*',
+                'cancha.nro_cancha',
+                'users.nombre as usuario_nombre',
+                'users.apellido as usuario_apellido',
+                'users.email as usuario_email'
+            )
             ->first();
 
+        // Calcula el horario de la reserva
         $reserva = calcularHorarioReserva($reserva);
 
         return response()->json([
@@ -164,18 +216,85 @@ class reservaController extends Controller
         $reserva->cancha_id = $request->cancha_id;
         $reserva->save();
 
-        // Obtener la reserva actualizada con el número de cancha
+        // Realiza el join con las tablas 'cancha' y 'users' para incluir datos adicionales
         $reservaActualizada = Reserva::join('cancha', 'reservas.cancha_id', '=', 'cancha.id')
+            ->join('users', 'reservas.usuario_id', '=', 'users.id')
             ->where('reservas.id', $reserva->id)
-            ->select('reservas.*', 'cancha.nro_cancha')
+            ->select(
+                'reservas.*',
+                'cancha.nro_cancha',
+                'users.nombre as usuario_nombre',
+                'users.apellido as usuario_apellido',
+                'users.email as usuario_email'
+            )
             ->first();
 
-        //Helper que calcula el start y el end en base al horario de la cancha.
+        // Calcula el horario de la reserva
         $reservaActualizada = calcularHorarioReserva($reservaActualizada);
 
         return response()->json([
             "message" => "Reserva editada exitosamente",
             "reserva" => $reservaActualizada
         ], 200);
+    }
+
+    public function eliminarReserva($id)
+    {
+        try {
+            $reserva = Reserva::find($id);
+
+            if (!$reserva) {
+                return response()->json([
+                    'message' => 'Reserva no encontrada',
+                    'status' => 404
+                ], 404);
+            }
+
+            $reserva->delete();
+            return response()->json([
+                'message' => 'Reserva eliminada exitosamente',
+                'status' => 200
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al eliminar la reserva',
+                'error' => $e->getMessage(),
+                'status' => 500
+            ], 500);
+        }
+    }
+
+
+    public function obtenerReportes(Request $request)
+    {
+        // Parsear la fecha completa y extraer el año
+        $year = $request->input('year');
+
+        try {
+            // Obtener la cantidad de reservas agrupadas por mes del año actual
+            $reservasPorMes = DB::table('reservas')
+                ->selectRaw('MONTH(fecha) as mes, COUNT(*) as cantidad')
+                ->whereYear('fecha', $year)
+                ->groupBy('mes')
+                ->pluck('cantidad', 'mes'); // Devuelve un array con clave mes y valor cantidad
+
+            // Inicializar un array con 0 para cada mes
+            $datos = array_fill(1, 12, 0); // Llena un array con 12 elementos inicializados en 0
+
+            // Rellenar los meses con los datos reales de la consulta
+            foreach ($reservasPorMes as $mes => $cantidad) {
+                $datos[$mes] = $cantidad;
+            }
+
+            return response()->json([
+                'message' => 'Datos obtenidos exitosamente.',
+                'datos' => array_values($datos), // Devuelve solo los valores como array numérico
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'No se pudieron obtener los reportes.',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
