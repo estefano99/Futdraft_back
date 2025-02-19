@@ -6,14 +6,11 @@ use App\Helpers\ModuloHelper;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use App\Mail\NewUserMailable;
 use App\Models\Accion;
+use App\Models\AuditoriaLog;
 use App\Models\Grupo;
 use App\Models\Modulo;
 
@@ -56,6 +53,7 @@ class UserController extends Controller
             'password' => Hash::make($request->password),
             'dni' => $request->dni,
             'nro_celular' => $request->nro_celular,
+            'tipo_usuario' => 'cliente',
         ]);
 
         // Obtener las acciones que el cliente puede realizar
@@ -110,6 +108,12 @@ class UserController extends Controller
         // Usar el helper para obtener los módulos
         $modulos = ModuloHelper::obtenerModulos($accionesTotales);
 
+        // Registrar el evento de inicio de sesión
+        AuditoriaLog::create([
+            'user_id' => $user->id,
+            'evento' => 'login',
+        ]);
+
         return response()->json([
             'user' => $user,
             'token' => $user->createToken('token-name')->plainTextToken,
@@ -149,6 +153,12 @@ class UserController extends Controller
     public function logout(Request $request)
     {
         $request->user()->tokens()->delete();
+
+        // Registrar el evento de cierre de sesión
+        AuditoriaLog::create([
+            'user_id' => $request->user()->id,
+            'evento' => 'logout',
+        ]);
 
         return response()->json(true);
     }
@@ -319,6 +329,7 @@ class UserController extends Controller
                 'acciones.*' => 'integer|exists:acciones,id',
                 'grupos' => 'nullable|array',
                 'grupos.*' => 'integer|exists:grupos,id',
+                'tipo_usuario' => 'nullable|in:cliente,admin,empleado',
             ],
             [
                 'nombre.required' => 'El nombre es obligatorio.',
@@ -326,6 +337,7 @@ class UserController extends Controller
                 'email.required' => 'El email es obligatorio.',
                 'email.email' => 'El email debe ser una dirección válida.',
                 'email.unique' => 'El email ya está registrado.',
+                'tipo_usuario.in' => 'El tipo de usuario debe ser cliente, admin o empleado.',
             ]
         );
 
@@ -344,6 +356,7 @@ class UserController extends Controller
                 'nro_celular' => $request->nro_celular ?? null,
                 'dni' => $request->dni ?? null,
                 'estado' => $request->estado ?? 1,
+                'tipo_usuario' => $request->tipo_usuario ?? 'cliente',
             ]);
 
             // Asigna el password generado al atributo temporal en el model, luego se envia al OBSERVER
@@ -374,7 +387,6 @@ class UserController extends Controller
         }
     }
 
-
     public function editarUsuario(Request $request, $id)
     {
         try {
@@ -397,6 +409,7 @@ class UserController extends Controller
                 'acciones.*' => 'integer|exists:acciones,id',
                 'grupos' => 'nullable|array',
                 'grupos.*' => 'integer|exists:grupos,id',
+                'tipo_usuario' => 'nullable|in:cliente,admin,empleado',
             ]);
 
             $usuario->update([
@@ -406,6 +419,7 @@ class UserController extends Controller
                 'estado' => $validatedData['estado'],
                 'nro_celular' => $validatedData['nro_celular'] ?? null,
                 'dni' => $validatedData['dni'] ?? null,
+                'tipo_usuario' => $validatedData['tipo_usuario'],
             ]);
 
             if (isset($validatedData['acciones'])) {

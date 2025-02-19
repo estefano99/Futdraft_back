@@ -27,6 +27,7 @@ class User extends Authenticatable
         'nro_celular',
         'dni',
         'estado',
+        'tipo_usuario',
         'tipo_usuario'
     ];
 

@@ -31,7 +31,7 @@ class grupoController extends Controller
             }
 
             $grupos = $query->paginate(5);
-            Log::info($grupos);
+            // Log::info($grupos);
 
             $data = [
                 'grupos' => $grupos->items(),
@@ -43,7 +43,6 @@ class grupoController extends Controller
                 ],
                 'status' => 200
             ];
-            Log::info("Info Grupos");
             return response()->json($data, 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -56,7 +55,6 @@ class grupoController extends Controller
     public function listadoGruposSinPaginacion(Request $request)
     {
         try {
-            Log::info("Info Grupos sin PAGINACION");
             $grupos = Grupo::all();
             return response()->json($grupos, 200);
         } catch (\Exception $e) {

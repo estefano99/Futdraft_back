@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\ValidationHelpers;
+use App\Models\AuditoriaReserva;
 use App\Models\Horario;
 use App\Models\Reserva;
 use Carbon\Carbon;
@@ -173,6 +174,19 @@ class reservaController extends Controller
 
         $reserva->save();
 
+        AuditoriaReserva::create([
+            'reserva_id'   => $reserva->id,
+            'actor_id'     => $request->user() ? $request->user()->id : null,
+            'accion'       => 'creado',
+            'datos_previos' => null,
+            'datos_nuevos' => json_encode([
+                'usuario_asignado' => $request->usuario_id,
+                'precio'           => $request->precio,
+                'fecha'            => $request->fecha,
+                'cancha_id'        => $request->cancha_id,
+            ]),
+        ]);
+
         // Realiza el join con la tabla 'users' para incluir los datos del usuario
         $reserva = Reserva::join('cancha', 'reservas.cancha_id', '=', 'cancha.id')
             ->join('users', 'reservas.usuario_id', '=', 'users.id')
@@ -211,10 +225,32 @@ class reservaController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Datos previos de la reserva encontrada para la auditoría
+        $datosPrevios = [
+            'usuario_asignado' => $reserva->usuario_id,
+            'precio'           => $reserva->precio,
+            'fecha'            => $reserva->fecha,
+            'cancha_id'        => $reserva->cancha_id,
+        ];
+
         $reserva->precio = $request->precio;
         $reserva->fecha = $request->start;
         $reserva->cancha_id = $request->cancha_id;
         $reserva->save();
+
+        // Crear auditoría
+        AuditoriaReserva::create([
+            'reserva_id'   => $reserva->id,
+            'actor_id'     => $request->user() ? $request->user()->id : null,
+            'accion'       => 'actualizado',
+            'datos_previos' => json_encode($datosPrevios),
+            'datos_nuevos' => json_encode([
+                'usuario_asignado' => $request->usuario_id,
+                'precio'           => $request->precio,
+                'fecha'            => $request->start,
+                'cancha_id'        => $request->cancha_id,
+            ]),
+        ]);
 
         // Realiza el join con las tablas 'cancha' y 'users' para incluir datos adicionales
         $reservaActualizada = Reserva::join('cancha', 'reservas.cancha_id', '=', 'cancha.id')
@@ -238,7 +274,7 @@ class reservaController extends Controller
         ], 200);
     }
 
-    public function eliminarReserva($id)
+    public function eliminarReserva(Request $request, $id)
     {
         try {
             $reserva = Reserva::find($id);
@@ -250,7 +286,25 @@ class reservaController extends Controller
                 ], 404);
             }
 
+            // Capturar datos previos antes de eliminar para la auditoría
+            $datosPrevios = [
+                'usuario_asignado' => $reserva->usuario_id,
+                'precio'           => $reserva->precio,
+                'fecha'            => $reserva->fecha,
+                'cancha_id'        => $reserva->cancha_id,
+            ];
+
             $reserva->delete();
+
+            // Crear auditoría
+            AuditoriaReserva::create([
+                'reserva_id'    => $reserva->id,
+                'actor_id'      => $request->user() ? $request->user()->id : null,
+                'accion'        => 'eliminado',
+                'datos_previos' => json_encode($datosPrevios),
+                'datos_nuevos'  => null,
+            ]);
+
             return response()->json([
                 'message' => 'Reserva eliminada exitosamente',
                 'status' => 200
@@ -258,11 +312,12 @@ class reservaController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al eliminar la reserva',
-                'error' => $e->getMessage(),
-                'status' => 500
+                'error'   => $e->getMessage(),
+                'status'  => 500
             ], 500);
         }
     }
+
 
 
     public function obtenerReportes(Request $request)
