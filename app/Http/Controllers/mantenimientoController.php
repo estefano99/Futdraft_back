@@ -2,11 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Commands\CancelarMantenimiento;
+use App\Commands\FinalizarMantenimiento;
+use App\Commands\IniciarMantenimiento;
 use App\Models\AuditoriaMantenimiento;
 use App\Models\Mantenimiento;
 use App\Models\Tarea;
+use App\States\Cancelado;
+use App\States\Completado;
+use App\States\EnProgreso;
+use App\States\Pendiente;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -66,6 +75,21 @@ class MantenimientoController extends Controller
         }
     }
 
+    public function obtenerMantenimientoById($id)
+    {
+        try {
+            $tareas = Tarea::where('mantenimiento_id', $id)->get();
+            return response()->json([
+                'tareas' => $tareas,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Ocurrió un error al obtener los mantenimientos.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function listadoMantenimientosSelect()
     {
         try {
@@ -78,6 +102,8 @@ class MantenimientoController extends Controller
                 ->whereIn('estado', ['pendiente', 'en_progreso'])
                 ->where('fecha', '>=', $fechaActual)
                 ->get();
+
+                Log::info('Mantenimientos encontrados:', ['mantenimientos' => $mantenimientos]);
 
             // Verificar si se encontraron registros
             if ($mantenimientos->isEmpty()) {
@@ -137,12 +163,6 @@ class MantenimientoController extends Controller
 
             $mantenimiento->save();
 
-            // Log::info('Mantenimiento antes del State exitosamente', ['mantenimiento' => $mantenimiento]);
-            // ✅ Aplicar el Patrón State: asegura que el estado se instancie correctamente
-            // $mantenimiento->setState('pendiente');
-
-            // $mantenimiento->save();
-
             AuditoriaMantenimiento::create([
                 'user_id' => $request->responsable,
                 'accion' => 'creado',
@@ -171,16 +191,15 @@ class MantenimientoController extends Controller
     public function editarMantenimiento(Request $request, $id)
     {
         try {
-            // Buscar el mantenimiento
             $mantenimiento = Mantenimiento::find($id);
-            $estadoAuditoriaPrevio = $mantenimiento->estado;
             if (!$mantenimiento) {
                 return response()->json([
                     'message' => 'Mantenimiento no encontrado.',
                 ], 404);
             }
 
-            // Validar los datos del request
+            $estadoAuditoriaPrevio = $mantenimiento->estado;
+
             $validator = Validator::make($request->all(), [
                 'responsable' => [
                     'required',
@@ -203,60 +222,57 @@ class MantenimientoController extends Controller
                 ], 422);
             }
 
-            // Actualizar los datos generales del mantenimiento
+            // Actualizar los campos generales sin modificar aún el estado
             $mantenimiento->responsable = $request->responsable;
             $mantenimiento->fecha = $request->fecha;
             $mantenimiento->fecha_fin = $request->fecha_fin ?? null;
             $mantenimiento->descripcion = $request->descripcion;
-            $mantenimiento->estado = $request->estado;
+            $mantenimiento->tipo_mantenimiento_id = $request->tipo_mantenimiento_id;
 
-            // Log::info($mantenimiento->estado);
+            $nuevoEstado = $request->estado;
 
-            // // Usa el Patrón State para cambiar de estado correctamente
-            // if ($mantenimiento->estado !== $request->estado) {
-            //     switch ($request->estado) {
-            //         case 'pendiente':
-            //             Log::info('entro en pendiente el Request de estado');
-            //             $mantenimiento->setState('pendiente');
-            //             break;
-            //         case 'en_progreso':
-            //             Log::info('Entro en progreso el Request de estado');
-            //             $mantenimiento->iniciar();
-            //             break;
-            //         case 'completado':
-            //             $mantenimiento->completar();
-            //             break;
-            //         case 'cancelado':
-            //             $mantenimiento->cancelar();
-            //             break;
-            //         default:
-            //             return response()->json([
-            //                 'message' => 'Estado inválido.',
-            //             ], 400);
-            //     }
-            // }
+            switch ($mantenimiento->estado) {
+                case 'pendiente':
+                    if ($nuevoEstado === 'en_progreso') {
+                        $command = new IniciarMantenimiento();
+                    } else {
+                        throw new Exception("Transición no permitida de {$mantenimiento->estado} a {$nuevoEstado}.");
+                    }
+                    break;
+                case 'en_progreso':
+                    if ($nuevoEstado === 'completado') {
+                        $command = new FinalizarMantenimiento();
+                    } elseif ($nuevoEstado === 'cancelado') {
+                        $command = new CancelarMantenimiento();
+                    } else {
+                        throw new Exception("Transición no permitida de {$mantenimiento->estado} a {$nuevoEstado}.");
+                    }
+                    break;
+                default:
+                    throw new Exception("No se permiten transiciones desde el estado {$mantenimiento->estado}.");
+            }
 
-            // Log::info('Estado actual del mantenimiento: ' . $mantenimiento->estado);
-
-            // 🔹 Guarda cambios en la base de datos
+            $command->execute($mantenimiento);
             $mantenimiento->save();
 
+            // Registrar auditoría
             AuditoriaMantenimiento::create([
                 'user_id' => $request->responsable,
                 'accion' => 'actualizado',
                 'estado_previo' => $estadoAuditoriaPrevio,
-                'estado_nuevo' => $request->estado,
+                'estado_nuevo' => $mantenimiento->estado,
                 'mantenimiento_id' => $mantenimiento->id,
             ]);
 
-            // Cargar relaciones
+            // Cargar relaciones si es necesario
             $mantenimiento->load(['responsable', 'tipoMantenimiento']);
 
             return response()->json([
                 'message' => 'Mantenimiento actualizado exitosamente.',
                 'mantenimiento' => $mantenimiento,
             ], 200);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
+            Log::error('Error al actualizar el mantenimiento: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Ocurrió un error al actualizar el mantenimiento.',
                 'error' => $e->getMessage(),
@@ -287,6 +303,63 @@ class MantenimientoController extends Controller
             return response()->json([
                 'message' => 'Ocurrió un error al eliminar el Mantenimiento.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function obtenerReportes(Request $request)
+    {
+        // Obtén el año de la solicitud o usa uno por defecto (por ejemplo, 2025)
+        $year = $request->input('year');
+
+        try {
+            // Consulta para agrupar por mes y estado
+            $datosReporte = DB::table('mantenimientos')
+                ->selectRaw('MONTH(fecha) as mes, estado, COUNT(*) as cantidad')
+                ->whereYear('fecha', $year)
+                ->groupBy(DB::raw('MONTH(fecha)'), 'estado')
+                ->get();
+
+            // Define los estados a considerar
+            $estados = ['pendiente', 'en_progreso', 'completado', 'cancelado'];
+
+            // Inicializa un array con 12 ceros para cada estado
+            $report = [];
+            foreach ($estados as $estado) {
+                $report[$estado] = array_fill(1, 12, 0);
+            }
+
+            Log::info($report);
+
+            // Recorre los resultados y asigna la cantidad a cada mes y estado
+            foreach ($datosReporte as $row) {
+                $mes = (int)$row->mes;
+                $estado = $row->estado;
+                if (isset($report[$estado])) {
+                    $report[$estado][$mes] = $row->cantidad;
+                }
+            }
+
+            // Log::info($report);
+
+            // Prepara las series para el gráfico
+            $series = [];
+            foreach ($report as $estado => $data) {
+                $series[] = [
+                    'name' => ucfirst($estado),
+                    'data' => array_values($data),
+                ];
+            }
+            Log::info("series: " . json_encode($series));
+
+            return response()->json([
+                'message' => 'Datos obtenidos exitosamente.',
+                'series' => $series,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'No se pudieron obtener los reportes.',
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
